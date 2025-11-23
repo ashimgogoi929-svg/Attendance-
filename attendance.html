@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Sang Fa - Attendance</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{font-family:Segoe UI,Roboto,Arial;margin:12px;background:#f7f7f9;color:#222}
+  header{display:flex;align-items:center;gap:12px}
+  h1{font-size:18px;margin:0}
+  .controls{margin:10px 0;display:flex;gap:8px;flex-wrap:wrap}
+  input,button,select{padding:8px;border-radius:6px;border:1px solid #ccc}
+  button{background:#0b6efd;color:#fff;border:none}
+  .student-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:12px}
+  .card{padding:10px;border-radius:8px;background:#fff;border:1px solid #e6e6e6;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+  .name{font-weight:600}
+  .status{padding:6px;border-radius:6px;font-size:13px}
+  .present{background:#d1fae5;color:#065f46}
+  .absent{background:#fee2e2;color:#991b1b}
+  .late{background:#fff7ed;color:#92400e}
+  .small{font-size:12px;color:#666}
+  .import-area{width:100%;padding:8px;border-radius:6px;border:1px dashed #bbb;background:#fff;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Sang Fa – Attendance</h1>
+    <div class="small">Session: <span id="sessionName">Demo</span> • <span id="sessionDate"></span></div>
+  </div>
+</header>
+
+<div class="controls">
+  <input id="sessionInput" placeholder="Session name (e.g., Morning Class)"/>
+  <input id="studentInput" placeholder="Add student name (comma or newline separated)"/>
+  <button id="addBtn">Add Students</button>
+  <button id="clearBtn" style="background:#6c757d">Clear All</button>
+  <button id="exportBtn">Export CSV</button>
+  <button id="importBtn" style="background:#10b981">Import CSV</button>
+  <input id="filePicker" type="file" accept=".csv" style="display:none"/>
+</div>
+
+<div>
+  <div class="small">Quick import format: name,roll (one per line). Example: Ashim,001</div>
+  <textarea id="importArea" class="import-area" placeholder="Paste list here: name,roll" rows="4"></textarea>
+</div>
+
+<div class="student-list" id="studentList"></div>
+
+<script>
+const studentList = document.getElementById('studentList');
+const sessionDate = document.getElementById('sessionDate');
+const sessionName = document.getElementById('sessionName');
+const sessionInput = document.getElementById('sessionInput');
+const studentInput = document.getElementById('studentInput');
+const importArea = document.getElementById('importArea');
+sessionDate.textContent = new Date().toLocaleString();
+
+let students = [];
+
+function render(){
+  studentList.innerHTML='';
+  students.forEach((s, idx) => {
+    const c = document.createElement('div'); c.className='card';
+    const name = document.createElement('div'); name.className='name'; name.textContent = s.name + (s.roll? ' • '+s.roll:'');
+    const status = document.createElement('div'); status.className='status '+(s.status||'absent'); status.textContent = (s.status||'absent').toUpperCase();
+    const btns = document.createElement('div'); btns.style.display='flex'; btns.style.gap='6px';
+    ['present','absent','late'].forEach(st=>{
+      const b = document.createElement('button'); b.textContent = st; b.style.background='#eee'; b.style.color='#111';
+      b.onclick = ()=>{ students[idx].status = st; render(); };
+      btns.appendChild(b);
+    });
+    c.appendChild(name); c.appendChild(status); c.appendChild(btns);
+    studentList.appendChild(c);
+    status.className='status ' + (s.status||'absent');
+  });
+}
+
+document.getElementById('addBtn').onclick = ()=>{
+  const raw = studentInput.value.trim();
+  const session = sessionInput.value.trim();
+  if(session) sessionName.textContent = session;
+  if(!raw) return alert('Enter student names (comma or newline separated).');
+  const parts = raw.split(/\n|,/).map(x=>x.trim()).filter(Boolean);
+  parts.forEach(p=>{
+    const rr = p.split(/\s+|,/).map(x=>x.trim()).filter(Boolean);
+    const name = rr[0]; const roll = rr[1]||'';
+    students.push({name,roll,status:'absent'});
+  });
+  studentInput.value=''; render();
+};
+
+document.getElementById('clearBtn').onclick = ()=>{ if(confirm('Clear all students?')){students=[]; render();} };
+
+document.getElementById('exportBtn').onclick = ()=>{
+  if(students.length===0) return alert('No students to export.');
+  const rows = [];
+  rows.push(['session','date','name','roll','status'].join(','));
+  const date = new Date().toISOString();
+  students.forEach(s=>{
+    rows.push([sessionName.textContent,date, `"${s.name.replace(/"/g,'""')}"`, s.roll, s.status].join(','));
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = `attendance_${sessionName.textContent.replace(/\s+/g,'_')}_${(new Date()).toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+};
+
+document.getElementById('importBtn').onclick = ()=>{ document.getElementById('filePicker').click(); };
+document.getElementById('filePicker').onchange = (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const text = ev.target.result;
+    loadFromCSV(text);
+  };
+  reader.readAsText(f);
+};
+
+function loadFromCSV(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  lines.forEach(line=>{
+    const cols = line.split(',').map(c=>c.trim());
+    const name = cols[0].replace(/^"|"$/g,'');
+    const roll = cols[1]||'';
+    students.push({name,roll,status:'absent'});
+  });
+  render();
+}
+
+importArea.addEventListener('paste', (e)=>{
+  setTimeout(()=>{ const val = importArea.value.trim(); if(val) loadFromCSV(val); importArea.value=''; },100);
+});
+
+render();
+</script>
+</body>
+</html>
