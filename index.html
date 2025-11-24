@@ -2,136 +2,355 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Sang Fa - Attendance</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sang Fa — Attendance (Upgraded)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;600;700&display=swap" rel="stylesheet">
 <style>
-  body{font-family:Segoe UI,Roboto,Arial;margin:12px;background:#f7f7f9;color:#222}
-  header{display:flex;align-items:center;gap:12px}
-  h1{font-size:18px;margin:0}
-  .controls{margin:10px 0;display:flex;gap:8px;flex-wrap:wrap}
-  input,button,select{padding:8px;border-radius:6px;border:1px solid #ccc}
-  button{background:#0b6efd;color:#fff;border:none}
-  .student-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:12px}
-  .card{padding:10px;border-radius:8px;background:#fff;border:1px solid #e6e6e6;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+  :root{
+    --bg:#f6f7fb; --card:#fff; --muted:#666; --accent:#0b6efd;
+    --ok:#16a34a; --bad:#dc2626; --late:#f59e0b;
+  }
+  *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  body{margin:0;background:var(--bg);color:#111;padding:14px}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:20px}
+  .small{color:var(--muted);font-size:13px}
+  .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  input,textarea,select,button{font-size:14px}
+  input[type=text], textarea{padding:10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;width:100%}
+  .controls{display:grid;grid-template-columns:1fr auto;gap:8px;width:100%;max-width:980px}
+  .btn{padding:10px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer}
+  .btn.ghost{background:#fff;color:var(--accent);border:1px solid #dbeafe}
+  .btn.warn{background:var(--bad)}
+  .layout{display:grid;grid-template-columns:1fr;gap:12px;max-width:980px}
+  .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 1px 4px rgba(12,18,30,.04)}
+  .student-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
+  .student{padding:10px;border-radius:8px;border:1px solid #eef2ff;background:#fff;display:flex;flex-direction:column;gap:8px}
   .name{font-weight:600}
-  .status{padding:6px;border-radius:6px;font-size:13px}
-  .present{background:#d1fae5;color:#065f46}
-  .absent{background:#fee2e2;color:#991b1b}
-  .late{background:#fff7ed;color:#92400e}
-  .small{font-size:12px;color:#666}
-  .import-area{width:100%;padding:8px;border-radius:6px;border:1px dashed #bbb;background:#fff;margin-top:8px}
+  .roll{font-size:12px;color:var(--muted)}
+  .status-row{display:flex;gap:6px;align-items:center}
+  .sbtn{flex:1;padding:8px;border-radius:8px;border:none;cursor:pointer}
+  .present{background:var(--ok);color:#fff}
+  .absent{background:var(--bad);color:#fff}
+  .late{background:var(--late);color:#fff}
+  .smallmuted{font-size:12px;color:var(--muted)}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .flex-row{display:flex;gap:8px;align-items:center}
+  @media (min-width:880px){
+    .layout{grid-template-columns:380px 1fr}
+    .controls{grid-template-columns:1fr auto}
+  }
 </style>
 </head>
 <body>
+
 <header>
   <div>
-    <h1>Sang Fa – Attendance</h1>
-    <div class="small">Session: <span id="sessionName">Demo</span> • <span id="sessionDate"></span></div>
+    <h1>Sang Fa — Attendance</h1>
+    <div class="small">Quick attendance — students saved locally. Export CSV for records.</div>
   </div>
 </header>
 
-<div class="controls">
-  <input id="sessionInput" placeholder="Session name (e.g., Morning Class)"/>
-  <input id="studentInput" placeholder="Add student name (comma or newline separated)"/>
-  <button id="addBtn">Add Students</button>
-  <button id="clearBtn" style="background:#6c757d">Clear All</button>
-  <button id="exportBtn">Export CSV</button>
-  <button id="importBtn" style="background:#10b981">Import CSV</button>
-  <input id="filePicker" type="file" accept=".csv" style="display:none"/>
+<div class="top">
+  <div class="controls">
+    <input id="sessionInput" placeholder="Session name (e.g., Morning Class)" />
+    <div>
+      <button id="addSelectedBtn" class="btn">Add Students</button>
+    </div>
+  </div>
+
+  <div class="top-actions">
+    <button id="exportAllBtn" class="btn">Export Today's CSV</button>
+    <button id="clearTodayBtn" class="btn ghost">Clear Today's Data</button>
+    <button id="manageBtn" class="btn ghost">Manage Students</button>
+  </div>
 </div>
 
-<div>
-  <div class="small">Quick import format: name,roll (one per line). Example: Ashim,001</div>
-  <textarea id="importArea" class="import-area" placeholder="Paste list here: name,roll" rows="4"></textarea>
-</div>
+<div class="layout">
+  <!-- left: manage / import -->
+  <div class="card" id="leftCard">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>Students</strong><div class="smallmuted">Add once — saved locally in your browser</div></div>
+      <div class="smallmuted" id="countStudents">0 students</div>
+    </div>
 
-<div class="student-list" id="studentList"></div>
+    <div style="margin-top:10px;">
+      <textarea id="pasteArea" rows="6" placeholder="Paste list: name,roll (one per line). Example: Ashim,001"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="pasteAddBtn" class="btn">Add / Import</button>
+        <button id="exportListBtn" class="btn ghost">Export Student List</button>
+        <button id="clearListBtn" class="btn warn">Clear List</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <strong>Saved Students</strong>
+      <div class="student-list" id="savedList" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- right: attendance -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div>
+        <div class="smallmuted">Session: <strong id="sessionNameText">Demo</strong></div>
+        <div class="smallmuted">Date: <strong id="todayText"></strong></div>
+      </div>
+      <div class="smallmuted">Tap to mark</div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div id="todayCount" class="smallmuted">0 marked</div>
+      <div class="student-list" id="attendanceGrid" style="margin-top:8px"></div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="exportBtn" class="btn">Export Today's CSV</button>
+      <button id="saveBtn" class="btn ghost">Save Today</button>
+      <button id="resetStatuses" class="btn ghost">Reset All to Absent</button>
+    </div>
+
+    <div style="margin-top:12px;color:var(--muted);font-size:12px">
+      Tip: Add students once. Next time open the page and they will already appear. Mark present/absent per day.
+    </div>
+  </div>
+</div>
 
 <script>
-const studentList = document.getElementById('studentList');
-const sessionDate = document.getElementById('sessionDate');
-const sessionName = document.getElementById('sessionName');
+/* Attendance app with persistent student list + daily status */
+const LS_STUDENTS = 'sangfa_students_v1';
+const LS_ATTENDANCE_PREFIX = 'sangfa_attendance_'; // + YYYY-MM-DD
+
+// DOM
+const pasteArea = document.getElementById('pasteArea');
+const pasteAddBtn = document.getElementById('pasteAddBtn');
+const savedList = document.getElementById('savedList');
+const attendanceGrid = document.getElementById('attendanceGrid');
 const sessionInput = document.getElementById('sessionInput');
-const studentInput = document.getElementById('studentInput');
-const importArea = document.getElementById('importArea');
-sessionDate.textContent = new Date().toLocaleString();
+const sessionNameText = document.getElementById('sessionNameText');
+const todayText = document.getElementById('todayText');
+const countStudents = document.getElementById('countStudents');
+const todayCount = document.getElementById('todayCount');
+const pasteExportBtn = document.getElementById('exportListBtn');
+const clearListBtn = document.getElementById('clearListBtn');
+const exportBtn = document.getElementById('exportBtn');
+const exportAllBtn = document.getElementById('exportAllBtn');
+const clearTodayBtn = document.getElementById('clearTodayBtn');
+const saveBtn = document.getElementById('saveBtn');
+const manageBtn = document.getElementById('manageBtn');
+const resetStatuses = document.getElementById('resetStatuses');
+const addSelectedBtn = document.getElementById('addSelectedBtn');
 
-let students = [];
+// State
+let students = []; // {name, roll}
+let attendance = {}; // {rollOrIndex: status} for today
 
-function render(){
-  studentList.innerHTML='';
-  students.forEach((s, idx) => {
-    const c = document.createElement('div'); c.className='card';
-    const name = document.createElement('div'); name.className='name'; name.textContent = s.name + (s.roll? ' • '+s.roll:'');
-    const status = document.createElement('div'); status.className='status '+(s.status||'absent'); status.textContent = (s.status||'absent').toUpperCase();
-    const btns = document.createElement('div'); btns.style.display='flex'; btns.style.gap='6px';
-    ['present','absent','late'].forEach(st=>{
-      const b = document.createElement('button'); b.textContent = st; b.style.background='#eee'; b.style.color='#111';
-      b.onclick = ()=>{ students[idx].status = st; render(); };
-      btns.appendChild(b);
-    });
-    c.appendChild(name); c.appendChild(status); c.appendChild(btns);
-    studentList.appendChild(c);
-    status.className='status ' + (s.status||'absent');
-  });
+// Helpers
+function todayKey(dateObj){
+  const d = dateObj || new Date();
+  return d.toISOString().slice(0,10);
+}
+function attendanceLSKey(dateStr){ return LS_ATTENDANCE_PREFIX + dateStr; }
+
+function loadStudents(){
+  try{
+    const raw = localStorage.getItem(LS_STUDENTS);
+    students = raw ? JSON.parse(raw) : [];
+  }catch(e){ students=[]; }
+  renderSavedList();
+}
+function saveStudents(){
+  localStorage.setItem(LS_STUDENTS, JSON.stringify(students));
+  renderSavedList();
 }
 
-document.getElementById('addBtn').onclick = ()=>{
-  const raw = studentInput.value.trim();
-  const session = sessionInput.value.trim();
-  if(session) sessionName.textContent = session;
-  if(!raw) return alert('Enter student names (comma or newline separated).');
-  const parts = raw.split(/\n|,/).map(x=>x.trim()).filter(Boolean);
-  parts.forEach(p=>{
-    const rr = p.split(/\s+|,/).map(x=>x.trim()).filter(Boolean);
-    const name = rr[0]; const roll = rr[1]||'';
-    students.push({name,roll,status:'absent'});
+function loadAttendance(){
+  const key = attendanceLSKey(todayKey());
+  try{
+    attendance = JSON.parse(localStorage.getItem(key)) || {};
+  }catch(e){ attendance = {}; }
+  renderAttendanceGrid();
+}
+
+function saveAttendance(){
+  const key = attendanceLSKey(todayKey());
+  localStorage.setItem(key, JSON.stringify(attendance));
+  showCount();
+}
+
+// Rendering
+function renderSavedList(){
+  savedList.innerHTML='';
+  countStudents.textContent = students.length + ' students';
+  students.forEach((s, i)=>{
+    const el = document.createElement('div'); el.className='student';
+    el.style.display='flex'; el.style.flexDirection='column';
+    const nm = document.createElement('div'); nm.className='name'; nm.textContent = s.name;
+    const rl = document.createElement('div'); rl.className='roll'; rl.textContent = s.roll || '';
+    const row = document.createElement('div'); row.style.display='flex'; row.style.gap='6px';
+    const sel = document.createElement('button'); sel.textContent='Use'; sel.className='btn ghost';
+    sel.onclick = ()=>{
+      // populate attendance grid (scroll to top)
+      sessionInput.focus();
+      alert('To mark attendance: go to right panel and use Present/Absent buttons. Students are available there automatically.');
+    };
+    const del = document.createElement('button'); del.textContent='Delete'; del.className='btn warn';
+    del.onclick = ()=>{ if(confirm('Delete student '+s.name+'?')){ students.splice(i,1); saveStudents(); loadAttendance(); } };
+    row.appendChild(sel); row.appendChild(del);
+    el.appendChild(nm); el.appendChild(rl); el.appendChild(row);
+    savedList.appendChild(el);
   });
-  studentInput.value=''; render();
-};
+  renderAttendanceGrid(); // ensure grid reflects latest
+}
 
-document.getElementById('clearBtn').onclick = ()=>{ if(confirm('Clear all students?')){students=[]; render();} };
-
-document.getElementById('exportBtn').onclick = ()=>{
-  if(students.length===0) return alert('No students to export.');
-  const rows = [];
-  rows.push(['session','date','name','roll','status'].join(','));
-  const date = new Date().toISOString();
-  students.forEach(s=>{
-    rows.push([sessionName.textContent,date, `"${s.name.replace(/"/g,'""')}"`, s.roll, s.status].join(','));
+function renderAttendanceGrid(){
+  attendanceGrid.innerHTML='';
+  sessionNameText.textContent = sessionInput.value.trim() || 'Demo';
+  todayText.textContent = new Date().toLocaleString();
+  students.forEach((s, i)=>{
+    const key = s.roll || ('i' + i);
+    const st = attendance[key] || 'absent';
+    const c = document.createElement('div'); c.className='student';
+    const n = document.createElement('div'); n.className='name'; n.textContent = s.name;
+    const r = document.createElement('div'); r.className='roll'; r.textContent = s.roll || '';
+    const stRow = document.createElement('div'); stRow.className='status-row';
+    const b1 = document.createElement('button'); b1.className='sbtn present'; b1.textContent='Present';
+    const b2 = document.createElement('button'); b2.className='sbtn absent'; b2.textContent='Absent';
+    const b3 = document.createElement('button'); b3.className='sbtn late'; b3.textContent='Late';
+    // highlight current
+    if(st==='present'){ b1.style.opacity=1; b2.style.opacity=0.6; b3.style.opacity=0.6; }
+    else if(st==='late'){ b1.style.opacity=0.6; b2.style.opacity=0.6; b3.style.opacity=1; }
+    else { b1.style.opacity=0.6; b2.style.opacity=1; b3.style.opacity=0.6; }
+    b1.onclick = ()=>{ attendance[key]='present'; saveAttendance(); renderAttendanceGrid(); };
+    b2.onclick = ()=>{ attendance[key]='absent'; saveAttendance(); renderAttendanceGrid(); };
+    b3.onclick = ()=>{ attendance[key]='late'; saveAttendance(); renderAttendanceGrid(); };
+    stRow.appendChild(b1); stRow.appendChild(b2); stRow.appendChild(b3);
+    c.appendChild(n); c.appendChild(r); c.appendChild(stRow);
+    attendanceGrid.appendChild(c);
   });
-  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download = `attendance_${sessionName.textContent.replace(/\s+/g,'_')}_${(new Date()).toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
-};
+  showCount();
+}
 
-document.getElementById('importBtn').onclick = ()=>{ document.getElementById('filePicker').click(); };
-document.getElementById('filePicker').onchange = (e)=>{
-  const f = e.target.files[0]; if(!f) return;
-  const reader = new FileReader();
-  reader.onload = ev=>{
-    const text = ev.target.result;
-    loadFromCSV(text);
-  };
-  reader.readAsText(f);
-};
+function showCount(){
+  const total = students.length;
+  const marked = Object.keys(attendance).length;
+  todayCount.textContent = `${marked} marked / ${total} total`;
+}
 
-function loadFromCSV(text){
-  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+// Import / Export student list
+pasteAddBtn.onclick = ()=>{
+  const raw = pasteArea.value.trim();
+  if(!raw) return alert('Paste student list first (name,roll per line)');
+  const lines = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let added=0;
   lines.forEach(line=>{
-    const cols = line.split(',').map(c=>c.trim());
-    const name = cols[0].replace(/^"|"$/g,'');
-    const roll = cols[1]||'';
-    students.push({name,roll,status:'absent'});
+    // accept "name,roll" or "name"
+    const parts = line.split(',').map(p=>p.trim());
+    const name = parts[0];
+    const roll = parts[1] || '';
+    if(name){
+      students.push({name,roll});
+      added++;
+    }
   });
-  render();
+  saveStudents();
+  pasteArea.value='';
+  alert(added + ' students added.');
+};
+
+pasteExportBtn.onclick = ()=>{
+  if(students.length===0) return alert('No students to export.');
+  const rows = ['name,roll'];
+  students.forEach(s => rows.push(`"${s.name.replace(/"/g,'""')}",${s.roll}`));
+  downloadBlob(rows.join('\\n'), 'students_list.csv');
+};
+
+clearListBtn.onclick = ()=>{
+  if(!confirm('Delete ALL saved students?')) return;
+  students = []; saveStudents(); loadAttendance();
+};
+
+// Attendance export
+function downloadBlob(text, filename){
+  const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
 }
 
-importArea.addEventListener('paste', (e)=>{
-  setTimeout(()=>{ const val = importArea.value.trim(); if(val) loadFromCSV(val); importArea.value=''; },100);
-});
+exportBtn.onclick = ()=>{
+  const date = todayKey();
+  const rows = ['session,date,name,roll,status'];
+  const session = sessionInput.value.trim() || 'Demo';
+  students.forEach((s, i)=>{
+    const key = s.roll || ('i' + i);
+    const st = attendance[key] || 'absent';
+    rows.push([session, (new Date()).toISOString(), `"${s.name.replace(/"/g,'""')}"`, s.roll, st].join(','));
+  });
+  const fname = `attendance_${date}.csv`;
+  downloadBlob(rows.join('\\n'), fname);
+};
 
-render();
+exportAllBtn.onclick = exportBtn.onclick;
+
+clearTodayBtn.onclick = ()=>{
+  if(!confirm('Clear today attendance?')) return;
+  attendance = {};
+  saveAttendance();
+  renderAttendanceGrid();
+};
+
+saveBtn.onclick = ()=>{
+  saveAttendance();
+  alert('Today attendance saved locally.');
+};
+
+// Save student list and ensure attendance grid contains them
+addSelectedBtn.onclick = ()=>{
+  // quick add from paste area if filled
+  const raw = pasteArea.value.trim();
+  if(raw){
+    pasteAddBtn.click();
+    return;
+  }
+  alert('To add students: paste "name,roll" lines in the left box and click Add / Import.');
+};
+
+// Reset statuses
+resetStatuses.onclick = ()=>{
+  if(!confirm('Set everyone to Absent for today?')) return;
+  attendance = {};
+  students.forEach((s,i)=> {
+    const key = s.roll || ('i' + i);
+    attendance[key] = 'absent';
+  });
+  saveAttendance();
+  renderAttendanceGrid();
+};
+
+// Manage button toggles scroll to left
+manageBtn.onclick = ()=>{ window.scrollTo({top:0,behavior:'smooth'}); alert('Use left panel to manage students.'); };
+
+// Init
+sessionInput.addEventListener('input', ()=> sessionNameText.textContent = sessionInput.value.trim() || 'Demo');
+
+function init(){
+  loadStudents();
+  loadAttendance();
+  // if no students present, show placeholder
+  if(students.length===0){
+    pasteArea.placeholder = 'Paste list: name,roll (one per line). Example: Ashim,001';
+  }
+}
+init();
+
+/* Optional: migrate demo sample if you want to prefill:
+if(students.length===0){
+  students.push({name:'Ashim',roll:'001'},{name:'Rahul',roll:'002'});
+  saveStudents();
+  loadAttendance();
+}
+*/
 </script>
+
 </body>
 </html>
