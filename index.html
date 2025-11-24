@@ -49,6 +49,8 @@
   .btn-blue{background:#2563eb} .btn-green{background:#16a34a} .btn-amber{background:#d97706}
   .btn-purple{background:#7c3aed} .btn-red{background:#dc2626} .btn-gray{background:#6b7280}
   .hint{font-size:13px;color:#444}
+  /* small helpers */
+  .muted { color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
@@ -56,19 +58,19 @@
 <header>
   <div>
     <h1>Sang Fa — Attendance (Complete)</h1>
-    <div class="small">Auto-roll, monthly reports, QR scan & generate, cloud optional.</div>
+    <div class="small">Auto-roll, monthly reports, QR scan & generate, fees, cloud optional.</div>
   </div>
 </header>
 
 <!-- Quick trainer buttons (7 trainers) -->
-<div class="trainer-buttons">
-  <button class="btn-blue" onclick="switchClass('Prabita Gogoi')">Prabita Gogoi</button>
-  <button class="btn-green" onclick="switchClass('Manash Pratim Chutia')">Manash Pratim Chutia</button>
-  <button class="btn-amber" onclick="switchClass('Madhurjya Chutia')">Madhurjya Chutia</button>
-  <button class="btn-purple" onclick="switchClass('Suraj Saikia')">Suraj Saikia</button>
-  <button class="btn-red" onclick="switchClass('Bhagya Saikia')">Bhagya Saikia</button>
-  <button class="btn-gray" onclick="switchClass('Surajit Bora')">Surajit Bora</button>
-  <button class="btn-blue" onclick="switchClass('Ashim Gogoi')">Ashim Gogoi</button>
+<div class="trainer-buttons" id="trainerButtons">
+  <button class="btn-blue" onclick="attemptSwitch('Prabita Gogoi')">Prabita Gogoi</button>
+  <button class="btn-green" onclick="attemptSwitch('Manash Pratim Chutia')">Manash Pratim Chutia</button>
+  <button class="btn-amber" onclick="attemptSwitch('Madhurjya Chutia')">Madhurjya Chutia</button>
+  <button class="btn-purple" onclick="attemptSwitch('Suraj Saikia')">Suraj Saikia</button>
+  <button class="btn-red" onclick="attemptSwitch('Bhagya Saikia')">Bhagya Saikia</button>
+  <button class="btn-gray" onclick="attemptSwitch('Surajit Bora')">Surajit Bora</button>
+  <button class="btn-blue" onclick="attemptSwitch('Ashim Gogoi')">Ashim Gogoi</button>
 </div>
 
 <div class="top">
@@ -121,6 +123,28 @@
       <div id="qrPreview" style="margin-top:8px"></div>
       <div id="scannerArea" style="margin-top:8px"></div>
     </div>
+
+    <!-- FEES MANAGEMENT -->
+    <hr style="margin:12px 0"/>
+    <div>
+      <strong>Fees / Payments</strong>
+      <div class="smallmuted">Set monthly fee & mark payment per student</div>
+
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+        <select id="feeMonthSelect"></select>
+        <input id="feeAmountInput" placeholder="Default monthly amount (e.g. 500)" style="width:180px; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+        <button id="setDefaultFeeBtn" class="btn ghost">Set Default</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="openFeesListBtn" class="btn">Open Fees List</button>
+        <button id="exportFeesCSVBtn" class="btn ghost">Export Fees CSV</button>
+        <button id="combinedReportBtn" class="btn">Combined Fees + Attendance</button>
+      </div>
+
+      <div id="feesListArea" style="margin-top:10px;"></div>
+    </div>
+
   </div>
 
   <!-- RIGHT -->
@@ -166,6 +190,18 @@
 
     <hr/>
 
+    <div><strong>Device assignment</strong>
+      <div class="smallmuted">Assign this device to a trainer/class so that trainer can't switch to other classes without PIN.</div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <select id="deviceAssignSelect" style="flex:1"></select>
+        <button id="assignDeviceBtn" class="btn">Assign Device</button>
+        <button id="clearAssignBtn" class="btn ghost">Clear</button>
+      </div>
+      <div id="deviceAssignStatus" class="smallmuted" style="margin-top:8px"></div>
+    </div>
+
+    <hr/>
+
     <div><strong>Cloud (Firebase) - Optional</strong>
       <div class="smallmuted">Paste your Firebase config (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId)</div>
       <textarea id="firebaseConfig" rows="5" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
@@ -183,16 +219,14 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <script>
-/* App JS - full features (7 trainers preloaded) */
-
-const APP_PREFIX = 'sangfa_full_v3';
+/* ---------------- APP CONFIG & KEYS ---------------- */
+const APP_PREFIX = 'sangfa_full_v4';
 const LS_KEY_CONFIG = APP_PREFIX + '_config';
 const LS_KEY_STUDENTS_PREFIX = APP_PREFIX + '_students_';
 const LS_KEY_ATT_PREFIX = APP_PREFIX + '_att_';
 const LS_KEY_CLASSES = APP_PREFIX + '_classes';
-
-let firebaseApp = null;
-let firestore = null;
+const LS_KEY_DEVICE_ASSIGN = APP_PREFIX + '_device_assign'; // stores assigned class for this device
+const LS_KEY_FEES_PREFIX = APP_PREFIX + '_fees_'; // + class + '_' + YYYY-MM
 
 /* DOM refs */
 const pasteArea = document.getElementById('pasteArea');
@@ -228,28 +262,60 @@ const saveFirebaseBtn = document.getElementById('saveFirebaseBtn');
 const connectFirebaseBtn = document.getElementById('connectFirebaseBtn');
 const firebaseStatus = document.getElementById('firebaseStatus');
 const syncBtn = document.getElementById('syncBtn');
+const deviceAssignSelect = document.getElementById('deviceAssignSelect');
+const assignDeviceBtn = document.getElementById('assignDeviceBtn');
+const clearAssignBtn = document.getElementById('clearAssignBtn');
+const deviceAssignStatus = document.getElementById('deviceAssignStatus');
+
+/* Fees module refs */
+const feeMonthSelect = document.getElementById('feeMonthSelect');
+const feeAmountInput = document.getElementById('feeAmountInput');
+const setDefaultFeeBtn = document.getElementById('setDefaultFeeBtn');
+const openFeesListBtn = document.getElementById('openFeesListBtn');
+const feesListArea = document.getElementById('feesListArea');
+const exportFeesCSVBtn = document.getElementById('exportFeesCSVBtn');
+const combinedReportBtn = document.getElementById('combinedReportBtn');
 
 /* State */
-let classes = loadJSON(LS_KEY_CLASSES, ['Panita Gogoi','Manash Pratim Chutia','Madhurjya Chutia','Suraj Saikia','Bhagya Saikia','Surajit Bora','Ashim Gogoi']);
-let currentClass = classes[0] || 'Panita Gogoi';
+let classes = loadJSON(LS_KEY_CLASSES, ['Prabita Gogoi','Manash Pratim Chutia','Madhurjya Chutia','Suraj Saikia','Bhagya Saikia','Surajit Bora','Ashim Gogoi']);
+let currentClass = loadJSON(LS_KEY_DEVICE_ASSIGN, classes[0]) || classes[0]; // default to assigned or first
 let students = [];
 let attendance = {};
 let config = loadJSON(LS_KEY_CONFIG, {adminPinHash:null, firebaseConfig:null});
 
-/* Utils */
-function loadJSON(k, def=null){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+/* ------------------ UTIL ------------------ */
+function loadJSON(k, def=null){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def;}catch(e){return def;} }
 function saveJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
 function todayStr(d=new Date()){ return d.toISOString().slice(0,10); }
 function studentsKeyFor(cls){ return LS_KEY_STUDENTS_PREFIX + cls; }
 function attKeyFor(cls, dateStr){ return LS_KEY_ATT_PREFIX + cls + '_' + dateStr; }
+function feesKeyFor(cls, month){ return LS_KEY_FEES_PREFIX + cls + '_' + month; }
+function monthKeyFor(dateObj){ const y = dateObj.getFullYear(); const m = String(dateObj.getMonth()+1).padStart(2,'0'); return `${y}-${m}`; }
 
-/* Load/Save */
+/* ------------------ BASIC LOAD ------------------ */
+function init(){
+  // classes (ensure default list)
+  classes = loadJSON(LS_KEY_CLASSES, classes);
+  // ensure assigned class persists
+  const assigned = loadJSON(LS_KEY_DEVICE_ASSIGN, null);
+  if(assigned) currentClass = assigned;
+  // UI
+  populateDeviceAssignSelect();
+  ensureMonthOptions();
+  loadStudents(); loadAttendance();
+  classNameText.textContent = currentClass;
+  todayText.textContent = new Date().toLocaleString();
+  updateDeviceAssignStatus();
+}
+init();
+
+/* ------------------ Students & Attendance ------------------ */
 function loadStudents(){ students = loadJSON(studentsKeyFor(currentClass), []); renderSavedList(); }
 function saveStudents(){ saveJSON(studentsKeyFor(currentClass), students); renderSavedList(); }
 function loadAttendance(){ attendance = loadJSON(attKeyFor(currentClass, todayStr()), {}); renderAttendanceGrid(); }
 function saveAttendance(){ saveJSON(attKeyFor(currentClass, todayStr()), attendance); showCounts(); }
 
-/* Render */
+/* Render functions */
 function renderSavedList(){
   savedList.innerHTML=''; qrStudentSelect.innerHTML='';
   countStudents.textContent = students.length + ' students';
@@ -306,7 +372,7 @@ function showCounts(){
   todayCount.textContent = `${marked} marked / ${total} total`;
 }
 
-/* Add students */
+/* Add students & import */
 function normalizeName(n){ return n.trim().replace(/\s+/g,' '); }
 function nextRoll(){
   let max = 0;
@@ -315,7 +381,6 @@ function nextRoll(){
   });
   return String(max + 1).padStart(3,'0');
 }
-
 pasteAddBtn.onclick = ()=>{
   const raw = pasteArea.value.trim();
   if(!raw) return alert('Paste student list (name,roll optional).');
@@ -335,7 +400,6 @@ pasteAddBtn.onclick = ()=>{
   pasteArea.value='';
   alert(added + ' students added.');
 };
-
 pasteExportBtn.onclick = ()=>{
   if(students.length===0) return alert('No students to export.');
   const rows = ['name,roll'];
@@ -364,11 +428,11 @@ function exportTodayCSV(){
   downloadBlob(rows.join('\n'), `attendance_${currentClass}_${date}.csv`);
 }
 
-/* Monthly report */
+/* Monthly attendance (collectMonthData used by fees) */
 monthlyReportBtn.onclick = ()=> showMonthlyReportModal();
 monthlyCSVBtn.onclick = ()=> exportMonthlyCSV();
 
-function collectMonthData(year, month){
+function collectMonthData(year, month){ // month: 1-12
   const totals = {};
   students.forEach((s,i)=>{ const key = s.roll || ('i'+i); totals[key] = {name:s.name, roll:s.roll, present:0, absent:0, late:0, total:0} });
   const start = new Date(year, month-1, 1);
@@ -420,7 +484,7 @@ resetStatuses.onclick = ()=>{
 };
 saveBtn.onclick = ()=>{ saveAttendance(); alert('Saved today attendance.'); };
 
-/* QR gen & scan */
+/* QR generation & scanning */
 function generateQRForStudent(s){
   const data = `sangfa:${currentClass}:${s.roll || ''}`;
   qrPreview.innerHTML = '';
@@ -485,6 +549,13 @@ function processQRData(data){
   const roll = parts[2] || '';
   if(cls !== currentClass){
     if(!confirm(`QR is for class "${cls}". Switch to that class and mark?`)) return;
+    // require admin PIN to switch to different class
+    const assigned = loadJSON(LS_KEY_DEVICE_ASSIGN, null);
+    if(assigned && assigned !== cls){
+      const pin = prompt('Enter Admin PIN to switch class');
+      if(!pin) return;
+      if(hashPin(pin) !== (config && config.adminPinHash)) return alert('Wrong PIN');
+    }
     switchClass(cls);
   }
   const idx = students.findIndex(s => s.roll === roll);
@@ -498,7 +569,29 @@ function processQRData(data){
   }
 }
 
-/* Class management */
+/* Class switching with device assignment + PIN protection */
+function attemptSwitch(targetClass){
+  const assigned = loadJSON(LS_KEY_DEVICE_ASSIGN, null);
+  // if no device assigned, allow switching (admin should assign)
+  if(!assigned){
+    // require PIN to switch classes (to avoid accidental public switching)
+    const pin = prompt('Enter Admin PIN to switch class (no device assigned)');
+    if(!pin) return;
+    if(hashPin(pin) !== (config && config.adminPinHash)) return alert('Wrong PIN');
+    switchClass(targetClass);
+    return;
+  }
+  // if assigned and matches targetClass: allow
+  if(assigned === targetClass){
+    switchClass(targetClass); return;
+  }
+  // assigned exists and different -> require admin PIN
+  const pin = prompt('Enter Admin PIN to switch class');
+  if(!pin) return;
+  if(hashPin(pin) !== (config && config.adminPinHash)) return alert('Wrong PIN');
+  switchClass(targetClass);
+}
+
 setClassBtn.onclick = ()=>{
   const val = (classSelect.value || '').trim();
   if(!val) return alert('Type class/batch name');
@@ -519,17 +612,24 @@ function switchClass(name){
   loadStudents(); loadAttendance();
 }
 
-/* Admin PIN */
+/* ---------------- Admin + Device Assign ---------------- */
 adminBtn.onclick = ()=> {
+  // ask PIN if already set
   if(config && config.adminPinHash){
     const pin = prompt('Enter Admin PIN');
     if(!pin) return;
-    if(hashPin(pin) !== config.adminPinHash){ return alert('Wrong PIN'); }
+    if(hashPin(pin) !== config.adminPinHash) return alert('Wrong PIN');
   }
+  // open admin modal
   modal.style.display = 'flex';
   firebaseConfigBox.value = JSON.stringify(config.firebaseConfig || {});
+  populateDeviceAssignSelect();
 };
+
 closeModal.onclick = ()=> modal.style.display='none';
+
+function hashPin(pin){ let h=0; for(let i=0;i<pin.length;i++){ h = ((h<<5)-h) + pin.charCodeAt(i); h |= 0; } return String(h); }
+
 savePinBtn.onclick = ()=>{
   const val = adminPinInput.value.trim();
   if(!/^\d{4,8}$/.test(val)) return alert('PIN must be 4-8 digits');
@@ -538,9 +638,36 @@ savePinBtn.onclick = ()=>{
   adminPinInput.value='';
   alert('Admin PIN saved.');
 };
-function hashPin(pin){ let h=0; for(let i=0;i<pin.length;i++){ h = ((h<<5)-h) + pin.charCodeAt(i); h |= 0; } return String(h); }
 
-/* Firebase optional */
+/* Device assignment */
+function populateDeviceAssignSelect(){
+  deviceAssignSelect.innerHTML = '';
+  classes.forEach(c=>{
+    const opt = document.createElement('option'); opt.value = c; opt.textContent = c;
+    deviceAssignSelect.appendChild(opt);
+  });
+}
+assignDeviceBtn.onclick = ()=>{
+  const cls = deviceAssignSelect.value;
+  if(!cls) return alert('Choose class to assign this device');
+  saveJSON(LS_KEY_DEVICE_ASSIGN, cls);
+  currentClass = cls;
+  loadStudents(); loadAttendance();
+  updateDeviceAssignStatus();
+  alert('Device assigned to ' + cls);
+};
+clearAssignBtn.onclick = ()=>{
+  if(!confirm('Clear device assignment?')) return;
+  localStorage.removeItem(LS_KEY_DEVICE_ASSIGN);
+  updateDeviceAssignStatus();
+  alert('Device assignment cleared. Admin PIN will be required for class switching.');
+};
+function updateDeviceAssignStatus(){
+  const assigned = loadJSON(LS_KEY_DEVICE_ASSIGN, null);
+  deviceAssignStatus.textContent = assigned ? `This device assigned to: ${assigned}` : 'No device assignment (Admin required to switch classes).';
+}
+
+/* ---------------- Firebase optional ---------------- */
 saveFirebaseBtn.onclick = ()=>{
   try{
     const conf = JSON.parse(firebaseConfigBox.value || '{}');
@@ -585,20 +712,131 @@ async function syncToCloud(){
   await firestore.collection('sangfa').doc('attendance').set({[currentClass + '_' + todayStr()]: attendance}, {merge:true});
 }
 
-/* Init */
-function init(){
-  classes = loadJSON(LS_KEY_CLASSES, ['Panita Gogoi','Manash Pratim Chutia','Madhurjya Chutia','Suraj Saikia','Bhagya Saikia','Surajit Bora','Ashim Gogoi']);
-  if(!classes.includes(currentClass)) classes.unshift(currentClass);
-  classSelect.value = ''; classNameText.textContent = currentClass;
-  loadStudents(); loadAttendance();
-  todayText.textContent = new Date().toLocaleString();
+/* ---------------- FEES MODULE ---------------- */
+function ensureMonthOptions(){
+  feeMonthSelect.innerHTML = '';
+  const now = new Date();
+  for(let i=0;i<8;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const key = monthKeyFor(d);
+    const opt = document.createElement('option'); opt.value = key; opt.textContent = key;
+    feeMonthSelect.appendChild(opt);
+  }
+  feeMonthSelect.value = monthKeyFor(new Date());
 }
-init();
+ensureMonthOptions();
 
+setDefaultFeeBtn.onclick = ()=>{
+  const amount = Number(feeAmountInput.value || 0);
+  if(!amount || isNaN(amount)) return alert('Enter a valid amount');
+  const month = feeMonthSelect.value;
+  const fees = loadJSON(feesKeyFor(currentClass, month), {});
+  students.forEach((s,i)=>{
+    const key = s.roll || ('i'+i);
+    if(!fees[key]) fees[key] = {amount: amount, status: 'unpaid', paidDate: null};
+  });
+  saveJSON(feesKeyFor(currentClass, month), fees);
+  alert('Default fee set for ' + month);
+};
+
+openFeesListBtn.onclick = ()=> renderFeesList();
+exportFeesCSVBtn.onclick = ()=> exportFeesCSV();
+combinedReportBtn.onclick = ()=> showCombinedReportModal();
+
+function renderFeesList(){
+  const month = feeMonthSelect.value;
+  const fees = loadJSON(feesKeyFor(currentClass, month), {});
+  feesListArea.innerHTML = '';
+  if(students.length === 0) { feesListArea.textContent = 'No students in this class.'; return; }
+  students.forEach((s,i)=>{
+    const key = s.roll || ('i'+i);
+    const f = fees[key] || {amount:'', status:'unpaid', paidDate:null};
+    const row = document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.marginBottom='6px';
+    row.innerHTML = `<div style="width:180px">${s.name} (${s.roll||''})</div>`;
+    const amt = document.createElement('input'); amt.value = f.amount || ''; amt.style.width='110px'; amt.style.padding='6px'; amt.style.borderRadius='6px'; amt.style.border='1px solid #e2e8f0';
+    const statusBtn = document.createElement('button'); statusBtn.className='btn ghost'; statusBtn.textContent = (f.status === 'paid') ? 'Paid' : 'Mark Paid';
+    const paidDateSpan = document.createElement('div'); paidDateSpan.className='smallmuted'; paidDateSpan.style.minWidth='120px'; paidDateSpan.textContent = f.paidDate || '';
+    const markToggle = document.createElement('button'); markToggle.className='btn'; markToggle.textContent = 'Toggle';
+    amt.onchange = ()=>{
+      const feesNew = loadJSON(feesKeyFor(currentClass, month), {});
+      feesNew[key] = feesNew[key] || {amount:0, status:'unpaid', paidDate:null};
+      feesNew[key].amount = Number(amt.value || 0);
+      saveJSON(feesKeyFor(currentClass, month), feesNew);
+    };
+    statusBtn.onclick = ()=>{
+      const feesNew = loadJSON(feesKeyFor(currentClass, month), {});
+      feesNew[key] = feesNew[key] || {amount:0, status:'unpaid', paidDate:null};
+      if(feesNew[key].status === 'paid'){ feesNew[key].status = 'unpaid'; feesNew[key].paidDate = null; statusBtn.textContent='Mark Paid'; paidDateSpan.textContent=''; }
+      else { feesNew[key].status = 'paid'; feesNew[key].paidDate = new Date().toLocaleDateString(); statusBtn.textContent='Paid'; paidDateSpan.textContent = feesNew[key].paidDate; }
+      saveJSON(feesKeyFor(currentClass, month), feesNew);
+    };
+    markToggle.onclick = ()=>{ const amtVal = prompt('Enter amount received for '+ s.name, f.amount || ''); if(amtVal === null) return; const feesNew = loadJSON(feesKeyFor(currentClass, month), {}); feesNew[key] = { amount: Number(amtVal||0), status:'paid', paidDate: new Date().toLocaleDateString() }; saveJSON(feesKeyFor(currentClass, month), feesNew); renderFeesList(); };
+    row.appendChild(amt); row.appendChild(statusBtn); row.appendChild(paidDateSpan); row.appendChild(markToggle);
+    feesListArea.appendChild(row);
+  });
+}
+
+function exportFeesCSV(){
+  const month = feeMonthSelect.value;
+  const fees = loadJSON(feesKeyFor(currentClass, month), {});
+  const rows = ['name,roll,amount,status,paidDate'];
+  students.forEach((s,i)=>{
+    const key = s.roll || ('i'+i);
+    const f = fees[key] || {amount:'', status:'unpaid', paidDate:''};
+    rows.push(`"${s.name.replace(/"/g,'""')}",${s.roll||''},${f.amount||0},${f.status},${f.paidDate||''}`);
+  });
+  downloadBlob(rows.join('\n'), `${currentClass}_fees_${month}.csv`);
+}
+
+function showCombinedReportModal(){
+  const month = feeMonthSelect.value;
+  const totals = collectMonthData(Number(month.slice(0,4)), Number(month.slice(5,7)));
+  const fees = loadJSON(feesKeyFor(currentClass, month), {});
+  const report = [];
+  students.forEach((s,i)=>{
+    const key = s.roll || ('i'+i);
+    const att = totals[key] || {present:0, total:0};
+    const percent = att.total ? Math.round((att.present / att.total) * 100) : 0;
+    const f = fees[key] || {amount:'', status:'unpaid', paidDate:''};
+    report.push({
+      name: s.name,
+      roll: s.roll||'',
+      present: att.present,
+      totalDays: att.total,
+      attendancePercent: percent,
+      feeAmount: f.amount || 0,
+      feeStatus: f.status || 'unpaid',
+      paidDate: f.paidDate || ''
+    });
+  });
+  let text = `Combined Report — ${currentClass} — ${month}\n\n`;
+  report.forEach(r=>{
+    text += `${r.name} (${r.roll}) — Attendance: ${r.present}/${r.totalDays} (${r.attendancePercent}%), Fee: ${r.feeStatus} ₹${r.feeAmount} ${r.paidDate? '- Paid: ' + r.paidDate : ''}\n`;
+  });
+  if(confirm(text + '\n\nDo you want to download CSV of this report?')){
+    const rows = ['name,roll,present,totalDays,attendancePercent,feeAmount,feeStatus,paidDate'];
+    report.forEach(r => rows.push(`"${r.name.replace(/"/g,'""')}",${r.roll},${r.present},${r.totalDays},${r.attendancePercent},${r.feeAmount},${r.feeStatus},${r.paidDate}`));
+    downloadBlob(rows.join('\n'), `${currentClass}_combined_report_${month}.csv`);
+  }
+}
+
+/* ---------------- Helper: export all student QR images (simple preview approach) ---------------- */
+function exportAllQRsPreview(){
+  alert('Bulk ZIP creation not included. Use individual QR downloads.');
+}
+
+/* ------------------ init helpers ------------------ */
 window.addEventListener('storage', ()=> { loadStudents(); loadAttendance(); });
-function loadStudents(){ students = loadJSON(studentsKeyFor(currentClass), []); renderSavedList(); }
-function loadAttendance(){ attendance = loadJSON(attKeyFor(currentClass, todayStr()), {}); renderAttendanceGrid(); }
 
+function initLoad(){
+  // ensure currentClass exists
+  if(!classes.includes(currentClass)) classes.unshift(currentClass);
+  classNameText.textContent = currentClass;
+  loadStudents(); loadAttendance();
+}
+initLoad();
+
+/* End of script */
 </script>
 
 </body>
