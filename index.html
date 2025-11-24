@@ -47,6 +47,7 @@
   .trainer-buttons{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
   .trainer-buttons button{padding:8px 14px;border-radius:6px;border:none;color:#fff;cursor:pointer}
   .btn-blue{background:#2563eb} .btn-green{background:#16a34a} .btn-amber{background:#d97706}
+  .btn-purple{background:#7c3aed} .btn-red{background:#dc2626} .btn-gray{background:#6b7280}
   .hint{font-size:13px;color:#444}
 </style>
 </head>
@@ -59,11 +60,15 @@
   </div>
 </header>
 
-<!-- Quick trainer buttons -->
+<!-- Quick trainer buttons (7 trainers) -->
 <div class="trainer-buttons">
-  <button class="btn-blue" onclick="switchClass('Panita Gogoi')">Panita Gogoi</button>
+  <button class="btn-blue" onclick="switchClass('Prabita Gogoi')">Prabita Gogoi</button>
   <button class="btn-green" onclick="switchClass('Manash Pratim Chutia')">Manash Pratim Chutia</button>
-  <button class="btn-amber" onclick="switchClass('Madhujya Chutia')">Madhujya Chutia</button>
+  <button class="btn-amber" onclick="switchClass('Madhurjya Chutia')">Madhurjya Chutia</button>
+  <button class="btn-purple" onclick="switchClass('Suraj Saikia')">Suraj Saikia</button>
+  <button class="btn-red" onclick="switchClass('Bhagya Saikia')">Bhagya Saikia</button>
+  <button class="btn-gray" onclick="switchClass('Surajit Bora')">Surajit Bora</button>
+  <button class="btn-blue" onclick="switchClass('Ashim Gogoi')">Ashim Gogoi</button>
 </div>
 
 <div class="top">
@@ -178,11 +183,9 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <script>
-/*
- Complete JS for full app (students, attendance, QR, month report, firebase optional, admin pin).
-*/
+/* App JS - full features (7 trainers preloaded) */
 
-const APP_PREFIX = 'sangfa_full_v2';
+const APP_PREFIX = 'sangfa_full_v3';
 const LS_KEY_CONFIG = APP_PREFIX + '_config';
 const LS_KEY_STUDENTS_PREFIX = APP_PREFIX + '_students_';
 const LS_KEY_ATT_PREFIX = APP_PREFIX + '_att_';
@@ -191,7 +194,7 @@ const LS_KEY_CLASSES = APP_PREFIX + '_classes';
 let firebaseApp = null;
 let firestore = null;
 
-/* DOM */
+/* DOM refs */
 const pasteArea = document.getElementById('pasteArea');
 const pasteAddBtn = document.getElementById('pasteAddBtn');
 const savedList = document.getElementById('savedList');
@@ -227,30 +230,26 @@ const firebaseStatus = document.getElementById('firebaseStatus');
 const syncBtn = document.getElementById('syncBtn');
 
 /* State */
-let classes = loadJSON(LS_KEY_CLASSES, ['Default']);
-let currentClass = classes[0] || 'Default';
-let students = []; // {name, roll}
-let attendance = {}; // {key: status}
+let classes = loadJSON(LS_KEY_CLASSES, ['Panita Gogoi','Manash Pratim Chutia','Madhurjya Chutia','Suraj Saikia','Bhagya Saikia','Surajit Bora','Ashim Gogoi']);
+let currentClass = classes[0] || 'Panita Gogoi';
+let students = [];
+let attendance = {};
 let config = loadJSON(LS_KEY_CONFIG, {adminPinHash:null, firebaseConfig:null});
 
-/* Helpers */
+/* Utils */
 function loadJSON(k, def=null){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
 function saveJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
 function todayStr(d=new Date()){ return d.toISOString().slice(0,10); }
 function studentsKeyFor(cls){ return LS_KEY_STUDENTS_PREFIX + cls; }
 function attKeyFor(cls, dateStr){ return LS_KEY_ATT_PREFIX + cls + '_' + dateStr; }
 
-/* Load & Save */
-function loadClasses(){ classes = loadJSON(LS_KEY_CLASSES, ['Default']); if(!classes.includes(currentClass)) classes.unshift(currentClass); }
-function saveClasses(){ saveJSON(LS_KEY_CLASSES, classes); }
-
+/* Load/Save */
 function loadStudents(){ students = loadJSON(studentsKeyFor(currentClass), []); renderSavedList(); }
 function saveStudents(){ saveJSON(studentsKeyFor(currentClass), students); renderSavedList(); }
-
 function loadAttendance(){ attendance = loadJSON(attKeyFor(currentClass, todayStr()), {}); renderAttendanceGrid(); }
 function saveAttendance(){ saveJSON(attKeyFor(currentClass, todayStr()), attendance); showCounts(); }
 
-/* UI Render */
+/* Render */
 function renderSavedList(){
   savedList.innerHTML=''; qrStudentSelect.innerHTML='';
   countStudents.textContent = students.length + ' students';
@@ -307,7 +306,7 @@ function showCounts(){
   todayCount.textContent = `${marked} marked / ${total} total`;
 }
 
-/* Adding students & auto-roll */
+/* Add students */
 function normalizeName(n){ return n.trim().replace(/\s+/g,' '); }
 function nextRoll(){
   let max = 0;
@@ -345,7 +344,7 @@ pasteExportBtn.onclick = ()=>{
 };
 clearListBtn.onclick = ()=>{ if(!confirm('Delete ALL saved students?')) return; students=[]; saveStudents(); loadAttendance(); };
 
-/* Attendance export */
+/* Export attendance */
 function downloadBlob(text, filename){
   const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -421,7 +420,7 @@ resetStatuses.onclick = ()=>{
 };
 saveBtn.onclick = ()=>{ saveAttendance(); alert('Saved today attendance.'); };
 
-/* QR generation & scanning */
+/* QR gen & scan */
 function generateQRForStudent(s){
   const data = `sangfa:${currentClass}:${s.roll || ''}`;
   qrPreview.innerHTML = '';
@@ -505,7 +504,7 @@ setClassBtn.onclick = ()=>{
   if(!val) return alert('Type class/batch name');
   if(!classes.includes(val)) classes.push(val);
   currentClass = val;
-  saveClasses(); saveJSON(LS_KEY_CLASSES, classes);
+  saveJSON(LS_KEY_CLASSES, classes);
   loadStudents(); loadAttendance();
   classSelect.value = '';
   alert('Class set to ' + currentClass);
@@ -515,7 +514,7 @@ function switchClass(name){
   if(!name) return;
   if(!classes.includes(name)) classes.push(name);
   currentClass = name;
-  saveClasses();
+  saveJSON(LS_KEY_CLASSES, classes);
   classSelect.value = '';
   loadStudents(); loadAttendance();
 }
@@ -588,7 +587,7 @@ async function syncToCloud(){
 
 /* Init */
 function init(){
-  classes = loadJSON(LS_KEY_CLASSES, ['Panita Gogoi','Manash Pratim Chutia','Madhujya Chutia']);
+  classes = loadJSON(LS_KEY_CLASSES, ['Panita Gogoi','Manash Pratim Chutia','Madhurjya Chutia','Suraj Saikia','Bhagya Saikia','Surajit Bora','Ashim Gogoi']);
   if(!classes.includes(currentClass)) classes.unshift(currentClass);
   classSelect.value = ''; classNameText.textContent = currentClass;
   loadStudents(); loadAttendance();
